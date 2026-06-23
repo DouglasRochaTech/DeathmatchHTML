@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LEFTYPOL ANIMAL DEATH MATCH!!!!!!!!!!!</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            padding: 20px;
+            background-color: #2b2b2b;
+            color: #eee;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h2 { margin-bottom: 10px; }
+        .controls-container {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+            width: 1000px;
+            max-width: 95vw;
+        }
+        .panel {
+            background: #2a2a2e;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #3a3a3e;
+            flex: 1;
+        }
+        .panel h3 { margin-top: 0; border-bottom: 1px solid #444; padding-bottom: 5px;}
+        .setting-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 15px;
+            align-items: flex-end;
+        }
+        .setting-group label {
+            font-weight: bold;
+            font-size: 13px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        input, button {
+            padding: 8px;
+            font-size: 14px;
+            border: 1px solid #4a4a50;
+            border-radius: 4px;
+            background: #3a3a40;
+            color: white;
+        }
+        input[type="file"] {
+            padding: 5px;
+            cursor: pointer;
+        }
+        #names-container {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .name-input-pair {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .color-swatch {
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            border: 1px solid #fff;
+        }
+        button {
+            background-color: #dc3545;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+            padding: 10px 20px;
+            margin-top: 10px;
+        }
+        button:hover { background-color: #c82333; }
+        button:disabled { background-color: #555; cursor: not-allowed; }
+        #canvas-container {
+            position: relative;
+            /* box-shadow: 0 4px 15px rgba(0,0,0,0.5); */
+            line-height: 0;
+        }
+        canvas {
+            background-color: #2b2b2b;
+            border-radius: 4px;
+        }
+        #results {
+            font-size: 24px;
+            font-weight: bold;
+            margin-top: 15px;
+            min-height: 35px;
+            color: #ffc107;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>🤼 Seeded Pixel Arena: Last One Standing</h2>
+    
+    <div class="controls-container">
+        <div class="panel">
+            <h3>1. Arena Setup</h3>
+            <div class="setting-group">
+                <label>
+                    Upload Map (.png/.jpg)
+                    <input type="file" id="mapUpload" accept="image/*">
+                </label>
+                <label>
+                    Seed Phrase
+                    <input type="text" id="seed" value="penis" style="width: 120px;">
+                </label>
+                <label>
+                    Contenders (2-16)
+                    <input type="number" id="numHorses" value="8" min="2" max="16" style="width: 60px;">
+                </label>
+            </div>
+            <button id="startBtn" onclick="startBrawl()" disabled>Upload Map to Start</button>
+        </div>
+
+        <div class="panel">
+            <h3>2. Customize Contenders</h3>
+            <div id="names-container"></div>
+        </div>
+    </div>
+
+    <div id="canvas-container">
+        <canvas id="arenaCanvas" width="1000" height="600"></canvas>
+    </div>
+    
+    <div id="results">UPLOAD THE GODDAMN IMAGE AND START THE BRAWL!!!</div>
+
+    <script>
+        const canvas = document.getElementById('arenaCanvas');
+        const ctx = canvas.getContext('2d');
+        const collisionCanvas = document.createElement('canvas');
+        const collisionCtx = collisionCanvas.getContext('2d', { willReadFrequently: true });
+
+        let isBrawling = false;
+        let contenders = [];
+        let skulls = [];
+        let startingCount = 0;
+        let rngState = 1;
+        let animationFrameId = null;
+        let mapImage = null;
+        let collisionData = null; 
+
+        // Core Physics Constants
+        const ENTITY_RADIUS = 22;
+        const BASE_SPEED = 1.5; 
+        const MAX_HEALTH = 100;
+        const RED_ZONE_DAMAGE = 11;
+
+        // Handle Map Upload
+        document.getElementById('mapUpload').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    mapImage = img;
+                    const aspect = img.width / img.height;
+                    let targetW = 1000;
+                    let targetH = 1000 / aspect;
+
+                    if(targetH > 700) {
+                        targetH = 700;
+                        targetW = 700 * aspect;
+                    }
+
+                    canvas.width = collisionCanvas.width = targetW;
+                    canvas.height = collisionCanvas.height = targetH;
+                    
+                    collisionCtx.drawImage(img, 0, 0, targetW, targetH);
+                    collisionData = collisionCtx.getImageData(0, 0, targetW, targetH).data;
+
+                    // Draw the initial map to the main canvas so the user can see it
+                    ctx.drawImage(img, 0, 0, targetW, targetH);
+
+                    document.getElementById('startBtn').disabled = false;
+                    document.getElementById('startBtn').textContent = "Start Brawl!";
+                    document.getElementById('results').textContent = "MAP LOADED!!!!!!!!!";
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        document.getElementById('numHorses').addEventListener('input', setupNameInputs);
+        setupNameInputs();
+
+        function setupNameInputs() {
+            const container = document.getElementById('names-container');
+            const num = Math.max(2, Math.min(16, parseInt(document.getElementById('numHorses').value) || 8));
+            container.innerHTML = '';
+            
+            const defaultNames = ["Karl", "Sahur", "Rose", "Delphine", "Kirk", "Josef", "Che", "Maupin", "Stirner", "Friedrich", "Adam", "Zedong", "Mikhail", "Vladimir", "Jeffrey", "Kirk", "Kochinski"];
+
+            for (let i = 0; i < num; i++) {
+                const color = `hsl(${(i * (360 / num))}, 80%, 50%)`;
+                const div = document.createElement('div');
+                div.className = 'name-input-pair';
+                div.innerHTML = `
+                    <div class="color-swatch" style="background-color: ${color};"></div>
+                    <input type="text" class="contender-name-input" value="${defaultNames[i] || 'Fighter ' + (i+1)}" maxlength="12" style="width: 100px;">
+                `;
+                container.appendChild(div);
+            }
+        }
+
+        function seededRandom() {
+            rngState = (1103515245 * rngState + 12345) % 2147483648;
+            return rngState / 2147483648;
+        }
+
+        function setSeed(strSeed) {
+            let hash = 0;
+            for (let i = 0; i < strSeed.length; i++) {
+                hash = (hash * 31 + strSeed.charCodeAt(i)) % 2147483648;
+            }
+            rngState = hash === 0 ? 1 : hash;
+        }
+
+        function startBrawl() {
+            if (!collisionData) return;
+            if (isBrawling) cancelAnimationFrame(animationFrameId);
+
+            const seedInput = document.getElementById('seed').value || Date.now().toString();
+            const nameInputs = document.querySelectorAll('.contender-name-input');
+            const numContenders = nameInputs.length;
+            startingCount = numContenders;
+
+            setSeed(seedInput);
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('results').textContent = "IT'S HAPPENING!!!!";
+            
+            contenders = [];
+            skulls = [];
+            isBrawling = true;
+
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+
+            for (let i = 0; i < numContenders; i++) {
+                let validSpawn = false;
+                let startX, startY;
+                let attempts = 0;
+
+                while(!validSpawn && attempts < 500) {
+                    const spread = 50 + (attempts * 0.5); 
+                    startX = centerX + (seededRandom() - 0.5) * spread;
+                    startY = centerY + (seededRandom() - 0.5) * spread;
+                    
+                    startX = Math.max(ENTITY_RADIUS + 5, Math.min(canvas.width - ENTITY_RADIUS - 5, startX));
+                    startY = Math.max(ENTITY_RADIUS + 5, Math.min(canvas.height - ENTITY_RADIUS - 5, startY));
+
+                    if(getPixelType(startX, startY) === 0) {
+                        validSpawn = true;
+                    }
+                    attempts++;
+                }
+
+                const angle = seededRandom() * Math.PI * 2;
+                const vx = Math.cos(angle) * BASE_SPEED;
+                const vy = Math.sin(angle) * BASE_SPEED;
+
+                contenders.push({
+                    name: nameInputs[i].value || `Fighter ${i+1}`,
+                    x: startX,
+                    y: startY,
+                    vx: vx,
+                    vy: vy,
+                    radius: ENTITY_RADIUS,
+                    color: `hsl(${(i * (360 / numContenders))}, 85%, 60%)`,
+                    health: MAX_HEALTH,
+                    eliminated: false
+                });
+            }
+
+            brawlLoop();
+        }
+
+        function getPixelType(x, y) {
+            if (!collisionData) return 0;
+
+            const ix = Math.floor(x);
+            const iy = Math.floor(y);
+
+            if (ix < 0 || ix >= canvas.width || iy < 0 || iy >= canvas.height) return 1;
+
+            const index = (iy * canvas.width + ix) * 4;
+            const r = collisionData[index];
+            const g = collisionData[index + 1];
+            const b = collisionData[index + 2];
+            const a = collisionData[index + 3];
+
+            if (a < 50) return 0; 
+            if (r === 0 && g === 0 && b === 0) return 1;
+            if (r > 180 && g < 60 && b < 60) return 2;
+
+            return 0;
+        }
+
+        function resolveCollisions() {
+            for (let i = 0; i < contenders.length; i++) {
+                if (contenders[i].eliminated) continue;
+                for (let j = i + 1; j < contenders.length; j++) {
+                    if (contenders[j].eliminated) continue;
+                    
+                    let c1 = contenders[i];
+                    let c2 = contenders[j];
+
+                    let dx = c2.x - c1.x;
+                    let dy = c2.y - c1.y;
+                    let distance = Math.sqrt(dx * dx + dy * dy);
+                    let minDist = c1.radius + c2.radius;
+
+                    if (distance < minDist) {
+                        let overlap = minDist - distance;
+                        let nx = dx / (distance || 1);
+                        let ny = dy / (distance || 1);
+
+                        c1.x -= nx * overlap * 0.5;
+                        c1.y -= ny * overlap * 0.5;
+                        c2.x += nx * overlap * 0.5;
+                        c2.y += ny * overlap * 0.5;
+
+                        let kx = c1.vx - c2.vx;
+                        let ky = c1.vy - c2.vy;
+                        let relativeVelocityNormal = nx * kx + ny * ky;
+
+                        if (relativeVelocityNormal > 0) {
+                            c1.vx -= relativeVelocityNormal * nx;
+                            c1.vy -= relativeVelocityNormal * ny;
+                            c2.vx += relativeVelocityNormal * nx;
+                            c2.vy += relativeVelocityNormal * ny;
+                        }
+                    }
+                }
+            }
+        }
+
+        function brawlLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw Map
+            if (mapImage) {
+                ctx.drawImage(mapImage, 0, 0, canvas.width, canvas.height);
+            }
+
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            // Draw Skulls for Eliminated Contenders First
+            ctx.font = '26px sans-serif';
+            for (let skull of skulls) {
+                ctx.fillText('💀', skull.x, skull.y);
+            }
+
+            let activeCount = 0;
+            let lastSurvivor = null;
+
+            for (let c of contenders) {
+                if (c.eliminated) continue;
+
+                c.x += c.vx;
+                c.y += c.vy;
+
+                // Canvas borders
+                if (c.x - c.radius < 0) { c.vx = Math.abs(c.vx); c.x = c.radius; }
+                if (c.x + c.radius > canvas.width) { c.vx = -Math.abs(c.vx); c.x = canvas.width - c.radius; }
+                if (c.y - c.radius < 0) { c.vy = Math.abs(c.vy); c.y = c.radius; }
+                if (c.y + c.radius > canvas.height) { c.vy = -Math.abs(c.vy); c.y = canvas.height - c.radius; }
+
+                let hitHazard = false;
+
+                const checkWall = (px, py) => {
+                    const type = getPixelType(px, py);
+                    if (type === 1 || type === 2) {
+                        if (type === 2) hitHazard = true;
+                        return true;
+                    }
+                    return false;
+                };
+
+                if (checkWall(c.x + c.radius, c.y)) { c.vx = -Math.abs(c.vx); c.x -= 1; }
+                if (checkWall(c.x - c.radius, c.y)) { c.vx = Math.abs(c.vx); c.x += 1; }
+                if (checkWall(c.x, c.y + c.radius)) { c.vy = -Math.abs(c.vy); c.y -= 1; }
+                if (checkWall(c.x, c.y - c.radius)) { c.vy = Math.abs(c.vy); c.y += 1; }
+
+                if (hitHazard) {
+                    c.health -= RED_ZONE_DAMAGE;
+                }
+            }
+
+            resolveCollisions();
+
+            for (let c of contenders) {
+                if (c.eliminated) continue;
+                
+                const currentSpeed = Math.sqrt(c.vx * c.vx + c.vy * c.vy);
+                if (currentSpeed > 0) {
+                    c.vx = (c.vx / currentSpeed) * BASE_SPEED;
+                    c.vy = (c.vy / currentSpeed) * BASE_SPEED;
+                } else {
+                    c.vx = BASE_SPEED;
+                    c.vy = 0;
+                }
+            }
+
+            for (let c of contenders) {
+                if (c.eliminated) continue;
+
+                if (c.health <= 0) {
+                    c.eliminated = true;
+                    skulls.push({ x: c.x, y: c.y });
+                    document.getElementById('results').textContent = `IT'S OVER FOR ${c.name}!!!!!!! OH NOOO!!!!!!! :C`;
+                    continue; 
+                }
+
+                activeCount++;
+                lastSurvivor = c;
+
+                // Circle glow
+                ctx.beginPath();
+                ctx.arc(c.x, c.y, c.radius + 2, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255,255,255,0.6)';
+                ctx.fill();
+
+                // Circle core
+                ctx.beginPath();
+                ctx.arc(c.x, c.y, c.radius, 0, Math.PI * 2);
+                ctx.fillStyle = c.color;
+                ctx.fill();
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                // Name
+                ctx.fillStyle = '#fff';
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 2.5;
+                ctx.font = 'bold 11px sans-serif';
+                ctx.strokeText(c.name, c.x, c.y - c.radius - 12);
+                ctx.fillText(c.name, c.x, c.y - c.radius - 12);
+
+                // Health Bar (Background)
+                const hpWidth = 30;
+                ctx.fillStyle = '#ff0000';
+                ctx.fillRect(c.x - hpWidth / 2, c.y - c.radius - 24, hpWidth, 4);
+                
+                // Health Bar (Foreground)
+                const hpPct = Math.max(0, c.health / MAX_HEALTH);
+                ctx.fillStyle = '#00ff00';
+                ctx.fillRect(c.x - hpWidth / 2, c.y - c.radius - 24, hpWidth * hpPct, 4);
+            }
+
+            if (activeCount <= 1 && startingCount > 1) {
+                isBrawling = false;
+                if (activeCount === 1 && lastSurvivor) {
+                    document.getElementById('results').textContent = `🏆 ${lastSurvivor.name} IS THE WINNER!!!!!!!!!! 🏆 \nROUND OF APPLAUSE!!!!! \n 👏👏👏👏👏👏👏👏👏👏👏👏👏 \n 👏👏👏👏👏👏👏👏👏👏👏👏👏`;
+                } else {
+                    document.getElementById('results').textContent = `EVERYONE DIED!!!!!!!!! SO SAD!!!!!!!!! :C`;
+                }
+                document.getElementById('startBtn').disabled = false;
+            } else {
+                animationFrameId = requestAnimationFrame(brawlLoop);
+            }
+        }
+    </script>
+</body>
+</html>
