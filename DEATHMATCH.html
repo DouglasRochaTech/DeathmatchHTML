@@ -103,7 +103,7 @@
 </head>
 <body>
 
-    <h2>🤼 Seeded Pixel Arena: Last One Standing</h2>
+    <h2>EXTREME LEFTYPOL ANIMAL ELECTION DEATHMATCH!!!!</h2>
     
     <div class="controls-container">
         <div class="panel">
@@ -114,7 +114,7 @@
                     <input type="file" id="mapUpload" accept="image/*">
                 </label>
                 <label>
-                    Seed Phrase
+                    Random Seed (important!!!)
                     <input type="text" id="seed" value="penis" style="width: 120px;">
                 </label>
                 <label>
@@ -361,7 +361,7 @@
             ctx.textBaseline = 'middle';
 
             // Draw Skulls for Eliminated Contenders First
-            ctx.font = '26px sans-serif';
+            ctx.font = '30px sans-serif';
             for (let skull of skulls) {
                 ctx.fillText('💀', skull.x, skull.y);
             }
@@ -467,7 +467,7 @@
             if (activeCount <= 1 && startingCount > 1) {
                 isBrawling = false;
                 if (activeCount === 1 && lastSurvivor) {
-                    document.getElementById('results').textContent = `🏆 ${lastSurvivor.name} IS THE WINNER!!!!!!!!!! 🏆 \nROUND OF APPLAUSE!!!!! \n 👏👏👏👏👏👏👏👏👏👏👏👏👏 \n 👏👏👏👏👏👏👏👏👏👏👏👏👏`;
+                    document.getElementById('results').innerHTML = `🏆 ${lastSurvivor.name} IS THE WINNER!!!!!!!!!! 🏆 <br> ROUND OF APPLAUSE!!!!! <br> 👏👏👏👏👏👏👏👏👏👏👏👏👏 <br> 👏👏👏👏👏👏👏👏👏👏👏👏👏`;
                 } else {
                     document.getElementById('results').textContent = `EVERYONE DIED!!!!!!!!! SO SAD!!!!!!!!! :C`;
                 }
