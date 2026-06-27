@@ -83,10 +83,56 @@
         }
         button:hover { background-color: #c82333; }
         button:disabled { background-color: #555; cursor: not-allowed; }
+        #main-area {
+            display: flex;
+            gap: 20px;
+            width: 100%;
+            max-width: 1200px;
+            align-items: flex-start;
+        }
         #canvas-container {
             position: relative;
-            /* box-shadow: 0 4px 15px rgba(0,0,0,0.5); */
+            flex: 1;
             line-height: 0;
+            min-width: 0;
+        }
+        #elimination-panel {
+            flex: 0 0 320px;
+            background: #2a2a2e;
+            border: 1px solid #3a3a3e;
+            border-radius: 8px;
+            padding: 15px;
+            max-height: 650px;
+            overflow: hidden;
+        }
+        #elimination-panel h3 {
+            margin-top: 0;
+            border-bottom: 1px solid #444;
+            padding-bottom: 5px;
+        }
+        .elimination-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            max-height: 540px;
+            overflow-y: auto;
+        }
+        .elimination-list li {
+            padding: 10px 12px;
+            border-bottom: 1px solid #444;
+            display: flex;
+            justify-content: flex-start;
+            gap: 8px;
+        }
+        .elimination-list li:last-child {
+            border-bottom: none;
+        }
+        .elimination-name {
+            color: #ffd966;
+            font-weight: bold;
+        }
+        .elimination-index {
+            color: #aaa;
         }
         canvas {
             background-color: #2b2b2b;
@@ -131,8 +177,16 @@
         </div>
     </div>
 
-    <div id="canvas-container">
-        <canvas id="arenaCanvas" width="1000" height="600"></canvas>
+    <div id="main-area">
+        <div id="canvas-container">
+            <canvas id="arenaCanvas" width="1000" height="600"></canvas>
+        </div>
+        <div id="elimination-panel">
+            <h3>Eliminated Contenders</h3>
+            <ul class="elimination-list" id="eliminationList">
+                <li>No eliminations yet.</li>
+            </ul>
+        </div>
     </div>
     
     <div id="results">UPLOAD THE GODDAMN IMAGE AND START THE BRAWL!!!</div>
@@ -154,11 +208,11 @@
 
         // Core Physics Constants
         const ENTITY_RADIUS = 22;
-        const BASE_SPEED = 1.5; 
+        const BASE_SPEED = 0.8; 
         const MAX_HEALTH = 100;
-        const RED_ZONE_DAMAGE = 11;
+        const RED_ZONE_DAMAGE = 4;
+        const COLLISION_DAMAGE = 10; 
 
-        // Handle Map Upload
         document.getElementById('mapUpload').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -183,7 +237,6 @@
                     collisionCtx.drawImage(img, 0, 0, targetW, targetH);
                     collisionData = collisionCtx.getImageData(0, 0, targetW, targetH).data;
 
-                    // Draw the initial map to the main canvas so the user can see it
                     ctx.drawImage(img, 0, 0, targetW, targetH);
 
                     document.getElementById('startBtn').disabled = false;
@@ -256,7 +309,7 @@
                 let attempts = 0;
 
                 while(!validSpawn && attempts < 500) {
-                    const spread = 50 + (attempts * 0.5); 
+                    const spread = 50 + (attempts * 0.7); 
                     startX = centerX + (seededRandom() - 0.5) * spread;
                     startY = centerY + (seededRandom() - 0.5) * spread;
                     
@@ -264,7 +317,22 @@
                     startY = Math.max(ENTITY_RADIUS + 5, Math.min(canvas.height - ENTITY_RADIUS - 5, startY));
 
                     if(getPixelType(startX, startY) === 0) {
-                        validSpawn = true;
+                        let overlappingAnotherContender = false;
+                        
+                        for(let existing of contenders) {
+                            let dx = startX - existing.x;
+                            let dy = startY - existing.y;
+                            let dist = Math.sqrt(dx * dx + dy * dy);
+                            
+                            if(dist < (ENTITY_RADIUS * 5)) {
+                                overlappingAnotherContender = true;
+                                break;
+                            }
+                        }
+                        
+                        if(!overlappingAnotherContender) {
+                            validSpawn = true;
+                        }
                     }
                     attempts++;
                 }
@@ -274,6 +342,7 @@
                 const vy = Math.sin(angle) * BASE_SPEED;
 
                 contenders.push({
+                    id: i, // Use unique numerical IDs for fast, crash-proof tracking
                     name: nameInputs[i].value || `Fighter ${i+1}`,
                     x: startX,
                     y: startY,
@@ -282,10 +351,13 @@
                     radius: ENTITY_RADIUS,
                     color: `hsl(${(i * (360 / numContenders))}, 85%, 60%)`,
                     health: MAX_HEALTH,
-                    eliminated: false
+                    eliminated: false,
+                    lastAttacker: "Spike",
+                    cooldowns: new Array(16).fill(0) // Fixed size array tracking frame cooldowns per competitor index
                 });
             }
-
+            
+            document.getElementById('eliminationList').innerHTML = '<li>No eliminations yet.</li>';
             brawlLoop();
         }
 
@@ -343,6 +415,18 @@
                             c1.vy -= relativeVelocityNormal * ny;
                             c2.vx += relativeVelocityNormal * nx;
                             c2.vy += relativeVelocityNormal * ny;
+                            
+                            // Check stable array index to handle frame immunity perfectly
+                            if (c1.cooldowns[c2.id] === 0 && c2.cooldowns[c1.id] === 0) {
+                                c1.health -= COLLISION_DAMAGE;
+                                c2.health -= COLLISION_DAMAGE;
+                                
+                                c1.lastAttacker = c2.name;
+                                c2.lastAttacker = c1.name;
+                                
+                                c1.cooldowns[c2.id] = 25;
+                                c2.cooldowns[c1.id] = 25;
+                            }
                         }
                     }
                 }
@@ -352,7 +436,6 @@
         function brawlLoop() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // Draw Map
             if (mapImage) {
                 ctx.drawImage(mapImage, 0, 0, canvas.width, canvas.height);
             }
@@ -360,7 +443,6 @@
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
 
-            // Draw Skulls for Eliminated Contenders First
             ctx.font = '30px sans-serif';
             for (let skull of skulls) {
                 ctx.fillText('💀', skull.x, skull.y);
@@ -372,10 +454,14 @@
             for (let c of contenders) {
                 if (c.eliminated) continue;
 
+                // Ticking down array timers cleanly without dealing with object mutability side effects
+                for (let idx = 0; idx < c.cooldowns.length; idx++) {
+                    if (c.cooldowns[idx] > 0) c.cooldowns[idx]--;
+                }
+
                 c.x += c.vx;
                 c.y += c.vy;
 
-                // Canvas borders
                 if (c.x - c.radius < 0) { c.vx = Math.abs(c.vx); c.x = c.radius; }
                 if (c.x + c.radius > canvas.width) { c.vx = -Math.abs(c.vx); c.x = canvas.width - c.radius; }
                 if (c.y - c.radius < 0) { c.vy = Math.abs(c.vy); c.y = c.radius; }
@@ -399,6 +485,7 @@
 
                 if (hitHazard) {
                     c.health -= RED_ZONE_DAMAGE;
+                    c.lastAttacker = "Spike";
                 }
             }
 
@@ -423,6 +510,12 @@
                 if (c.health <= 0) {
                     c.eliminated = true;
                     skulls.push({ x: c.x, y: c.y });
+                    
+                    let killMessage = c.lastAttacker === "Spike" ? 
+                        `${c.name} got spiked!` : 
+                        `${c.lastAttacker} killed ${c.name}!`;
+                        
+                    addEliminationEntry(killMessage);
                     document.getElementById('results').textContent = `IT'S OVER FOR ${c.name}!!!!!!! OH NOOO!!!!!!! :C`;
                     continue; 
                 }
@@ -430,13 +523,11 @@
                 activeCount++;
                 lastSurvivor = c;
 
-                // Circle glow
                 ctx.beginPath();
                 ctx.arc(c.x, c.y, c.radius + 2, 0, Math.PI * 2);
                 ctx.fillStyle = 'rgba(255,255,255,0.6)';
                 ctx.fill();
 
-                // Circle core
                 ctx.beginPath();
                 ctx.arc(c.x, c.y, c.radius, 0, Math.PI * 2);
                 ctx.fillStyle = c.color;
@@ -445,7 +536,6 @@
                 ctx.lineWidth = 1;
                 ctx.stroke();
 
-                // Name
                 ctx.fillStyle = '#fff';
                 ctx.strokeStyle = '#000';
                 ctx.lineWidth = 2.5;
@@ -453,12 +543,10 @@
                 ctx.strokeText(c.name, c.x, c.y - c.radius - 12);
                 ctx.fillText(c.name, c.x, c.y - c.radius - 12);
 
-                // Health Bar (Background)
                 const hpWidth = 30;
                 ctx.fillStyle = '#ff0000';
                 ctx.fillRect(c.x - hpWidth / 2, c.y - c.radius - 24, hpWidth, 4);
                 
-                // Health Bar (Foreground)
                 const hpPct = Math.max(0, c.health / MAX_HEALTH);
                 ctx.fillStyle = '#00ff00';
                 ctx.fillRect(c.x - hpWidth / 2, c.y - c.radius - 24, hpWidth * hpPct, 4);
@@ -475,6 +563,20 @@
             } else {
                 animationFrameId = requestAnimationFrame(brawlLoop);
             }
+        }
+
+        function addEliminationEntry(message) {
+            const list = document.getElementById('eliminationList');
+            const entries = Array.from(list.querySelectorAll('li')).filter(item => item.dataset.eliminated === 'true');
+            const li = document.createElement('li');
+            li.dataset.eliminated = 'true';
+            li.innerHTML = `<span class="elimination-index">#${entries.length + 1}</span><span class="elimination-name">${message}</span>`;
+
+            if (entries.length === 0 && list.children.length === 1 && list.children[0].textContent.trim() === 'No eliminations yet.') {
+                list.innerHTML = '';
+            }
+            list.appendChild(li);
+            list.scrollTop = list.scrollHeight;
         }
     </script>
 </body>
